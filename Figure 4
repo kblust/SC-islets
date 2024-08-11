@@ -1,2 +1,236 @@
-Figure 4
+#Figure 4
+
+#Dataset H1 Day 43
+
+counts.filter <- readRDS('/Users/blust/Documents/PhD/bioinformatics/Siqin/New/counts.filter.rds')
+meta.filter <- readRDS('/Users/blust/Documents/PhD/bioinformatics/Siqin/New/meta.filter.rds')
+
+temp.expG <- rownames(counts.filter)[rowSums(counts.filter[,c(meta.filter$cell)] >=1) >5]
+data <-  CreateSeuratObject(counts.filter[temp.expG,meta.filter$cell], meta.data = (meta.filter %>% tibble::column_to_rownames("cell"))) %>%
+  NormalizeData(verbose = FALSE) %>% 
+  FindVariableFeatures( selection.method = "vst", nfeatures = 2000, verbose = FALSE) %>% 
+  ScaleData(verbose=F,vars.to.regress=c("mt.perc"))%>% 
+  RunPCA(verbose=F,npcs=20) %>% 
+  RunUMAP(dims=1:20,verbose=F,min.dist=0.4) %>% 
+  FindNeighbors(dims = 1:20,verbose = FALSE) %>% 
+  FindClusters(resolution = 0.5,verbose = FALSE)
+
+Idents(obeject = data) <- "orig.ident"
+H1 <- subset(data, idents = "H1")
+H1 <- FindNeighbors(H1, dims = 1:20, verbose = FALSE) %>% 
+  FindClusters(resolution = 0.3, verbose = FALSE)  %>% 
+  RunUMAP(dims = 1:20)
+
+#assigning new cell idententities 
+new.cluster.ids <- c("Early Beta", "Mature Beta", "Alpha", "EC like", "Polyhormonal", "Proliferating Endocrine")
+names(new.cluster.ids) <- levels(H1)
+H1 <- RenameIdents(H1, new.cluster.ids)
+DimPlot(H1, reduction = "umap", group.by = "seurat_clusters")
+#add cell tyes to meta data
+H1$cell_prediction <- Idents(H1)
+
+#Figure 4A
+DimPlot(H1, reduction = "umap", cols = c("Alpha"="darkgoldenrod2", "Mature Beta"="coral4", "Early Beta"="coral1", "EC like"="forestgreen", "Exocrine progenitor"="cyan3", "Delta"="maroon", "Proliferating Endocrine"="magenta2", "Polyhormonal"="azure4"))
+
+#Figure 4B
+dp_marker <- c("INS","IAPP","HADH","ASCL1","BACE2","PCDH7","GCG","ARX","IRX2","TPH1","FEV","COL5A2", "CDK1", "MKI67")
+DotPlot(object = H1, features = dp_marker)+
+  RotatedAxis()
+
+#Figure 4C
+VlnPlot(H1, features = c("INS","GCG"), group.by = 'cell_prediction', pt.size = 0, cols = c("Alpha"="darkgoldenrod2", "Mature Beta"="coral4", "Early Beta"="coral1", "EC like"="forestgreen", "Proliferating Endocrine"="magenta2", "Polyhormonal"="azure4"))
+VlnPlot(H1, features = c("BACE2", "PCDH7"), group.by = 'cell_prediction', pt.size = 0, cols = c("Alpha"="darkgoldenrod2", "Mature Beta"="coral4", "Early Beta"="coral1", "EC like"="forestgreen", "Proliferating Endocrine"="magenta2", "Polyhormonal"="azure4"))
+VlnPlot(H1, features = c("HADH", "ASCL1"), group.by = 'cell_prediction', pt.size = 0,  cols = c("Alpha"="darkgoldenrod2", "Mature Beta"="coral4", "Early Beta"="coral1", "EC like"="forestgreen", "Proliferating Endocrine"="magenta2", "Polyhormonal"="azure4"))
+
+#Comaparison of existing protocols for pancreatic differentiation
+
+#Normalization with mulitbatchNorm 
+
+#Load data and generate singelcellexperiment
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(data.table)
+  library(tibble)
+  library(tidyr)
+  library(ggplot2)
+  library(batchelor)
+  library(Seurat)
+  library(scuttle)
+  library(SeuratDisk)
+  library(uwot)
+  library(writexl)
+  library(viridis)
+  library(viridisLite)
+  library(cowplot)
+  library(scran)
+  library(SeuratWrappers)
+})
+
+
+rename <- dplyr::rename
+select<- dplyr::select
+filter <- dplyr::filter
+options(digits = 4)
+options(future.globals.maxSize= 3001289600)
+
+counts.list <- list()
+metas.list <- list()
+
+set.seed(111)
+
+
+counts.H1 <- H1@assays$RNA@counts 
+counts.oton <- Otonkoski@assays$RNA@counts
+counts.mill <- Millman@assays$RNA@counts
+counts.veres <- Veres@assays$RNA@counts
+
+counts.list$H1 <- H1@assays$RNA@counts %>% as.data.frame()
+metas.list$H1 <- data.frame(cell=colnames(counts.list$H1),pj="H1") %>% tbl_df()
+
+
+counts.list$Otonkoski <-Otonkoski@assays$RNA@counts %>% as.data.frame()
+metas.list$Otonkoski <- data.frame(cell=colnames(counts.list$Otonkoski),pj="Balbao") %>% tbl_df()
+
+counts.list$Millman <- Millman@assays$RNA@counts %>% as.data.frame()
+metas.list$Millman <- data.frame(cell=colnames(counts.list$Millman),pj="Augsorn.") %>% tbl_df()
+
+counts.list$Veres <- Veres@assays$RNA@counts %>% as.data.frame()
+metas.list$Veres <- data.frame(cell=colnames(counts.list$Veres),pj="Veres")%>% tbl_df()
+
+
+meta.filter <- metas.list %>% do.call("bind_rows",.)
+meta.filter %>% group_by(cell) %>% mutate(nCell=n()) %>% arrange(desc(nCell))### confirm the cells are unqiue
+
+#number of genes before merge
+lapply(counts.list,nrow)
+
+#only using overlapped genes
+ov.genes <- rownames(counts.list[[1]]) %>% intersect(rownames(counts.list[[2]]))%>% intersect(rownames(counts.list[[3]]))%>% intersect(rownames(counts.list[[4]]))
+
+length(ov.genes)
+
+counts.filter <- counts.list[[1]][ov.genes,] %>% cbind(counts.list[[2]][ov.genes,])%>% cbind(counts.list[[3]][ov.genes,])%>% cbind(counts.list[[4]][ov.genes,])
+
+counts.filter %>% dim()
+
+#confirm no MT genes
+rownames(counts.filter)[grepl("^MT-",rownames(counts.filter))]  
+
+
+sel.expG <- rownames(counts.filter)
+
+sce.ob <- list()
+for (b in unique(meta.filter$pj  %>% unique() %>% as.vector())) {
+  print(b)
+  temp.M <- meta.filter %>% filter(pj==b)
+  temp.sce <-  SingleCellExperiment(list(counts=as.matrix(counts.filter[sel.expG,temp.M$cell])),colData=(temp.M %>% tibble::column_to_rownames("cell"))) %>% computeSumFactors()
+  sce.ob[[b]] <- temp.sce
+}
+
+#Normalization with mulitbatchNorm 
+# lognormExp.mBN is log tranformed mutli normalization results
+mBN.sce.ob <- multiBatchNorm(sce.ob[[1]],sce.ob[[2]],sce.ob[[3]],sce.ob[[4]])
+
+lognormExp.mBN<- mBN.sce.ob %>% lapply(function(x) {logcounts(x) %>% as.data.frame()  %>% return()}) %>% do.call("bind_cols",.)
+
+
+temp.M <- meta.filter
+
+temp.sel.expG <- rownames(lognormExp.mBN)
+
+
+data.merge <- CreateSeuratObject(counts.filter[temp.sel.expG,temp.M$cell], meta.data = (temp.M %>% tibble::column_to_rownames("cell"))) %>% NormalizeData(verbose = FALSE)
+
+data.merge@assays$RNA@data <- as.matrix(lognormExp.mBN[rownames(data.merge), colnames(data.merge)])
+
+data.spt <- SplitObject(data.merge, split.by = "pj")%>% lapply(function(x){x=FindVariableFeatures(x,verbose=F,nfeatures=2000)})
+
+nGene=2000;pc=25;
+trans.features <- SelectIntegrationFeatures(object.list = data.spt, nfeatures = nGene)
+for (b in names(data.spt)) {
+  VariableFeatures(data.spt[[b]]) <- trans.features
+}
+
+data.merge <- NormalizeData(data.merge)
+data.merge <- FindVariableFeatures(data.merge)
+DefaultAssay(data.merge)<-"RNA"
+data.merge <- RunFastMNN(object.list = SplitObject(data.merge, split.by = "pj"))
+all.genes <- rownames(data.merge)
+data.merge <- ScaleData(data.merge,  features = all.genes)
+data.merge <- RunUMAP(data.merge, reduction = "mnn", dims = 1:30)
+data.merge <- FindNeighbors(data.merge, reduction = "mnn", dims = 1:30)
+data.merge <- FindClusters(data.merge, resolution = 0.4,verbose=F)
+DimPlot(data.merge)
+
+data.merge <- JoinLayers(data.merge, layers = NULL, new = NULL)
+protocols <- data.merge
+
+markers.protocols.mBN <- FindAllMarkers(protocols, only.pos = TRUE, logfc.threshold = 0.25, min.pct = 0.5)
+write_xlsx(markers.protocols.mBN, path = "markers.protocols.new.xlsx")
+
+#add cell identities
+
+new.cluster.ids <- c("Alpha","Early Beta","Alpha","Mature Beta","EC like","EC like", "Exocrine progenitor", "Polyhormonal","Delta", "Proliferating Endocrine","EC like", "Alpha")
+names(new.cluster.ids) <- levels(protocols_new)
+protocols_new <- RenameIdents(protocols_new, new.cluster.ids)
+
+#Figure 4E
+DimPlot(protocols, reduction = "umap", split.by = "pj", cols = c("Alpha"="darkgoldenrod2", "Mature Beta"="coral4", "Early Beta"="coral1", "EC like"="forestgreen", "Exocrine progenitor"="cyan3", "Delta"="maroon", "Proliferating Endocrine"="magenta2", "Polyhormonal"="azure4"))
+
+#Figure 4F
+
+#bar plot cell percentages protocols
+t1 <- table(protocols_new$pj,protocols_new$cell_prediction)
+t1
+pt1<- data.frame(prop.table(t1,1))
+pt_new <- pt1%>% tibble::rownames_to_column("ds")%>% tbl_df() %>% select(Var1,Var2,Freq) %>% mutate(Var2=gsub(" ",".",Var2)) %>% spread(Var2,Freq) %>% rename(ds=Var1)
+pt_big <- select(pt_new, c("ds", "Early.Beta", "Mature.Beta", "Alpha", "EC.like"))
+pt_small <- select(pt_new, c("ds", "Exocrine.progenitor","Polyhormonal","Delta","Proliferating.Endocrine"))
+
+#' here is the color setting and order setting
+cluster.EML.color <- c("Alpha"="#F8766D","Early.Beta"="#D39200","Mature.Beta"="#93AA00","Beta"="#00BA38", "EC.like"="#00C19F","Exocrine.progenitor"="#00B9E3","Polyhormonal"="#619CFF","Delta"="#DB72FB","Proliferating.Endocrine"="#FF61C3")
+
+#' here is the order setting for cell cluster
+cluster.od <- c(c("Early.Beta","Mature.Beta","Alpha", "EC.like","Delta","Polyhormonal","Proliferating.Endocrine", "Exocrine.progenitor"))
+
+#' here is the order for protocol 
+ds.od <- c("H1","Augsorn.","Balboa","Veres")
+ds.color <- c("H1"="#F8766D","HS980"="#A3A500","Augsorn."="#00BF7D","Balboa"="#00B0F6","Veres"="#E76BF3")    
+
+pt_big  %>% gather(cluster,nCell,-ds) %>% mutate(ds=factor(ds,ds.od,ordered = T))%>% mutate(cluster=factor(cluster,cluster.od,ordered = T))%>%
+  ggplot(aes(x=cluster,y=100*nCell, fill=ds))+
+  geom_bar(stat="identity", position = "dodge")+
+  theme(legend.position="bottom")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+ theme(legend.title = element_blank())+ylab("Cells in cluster (%)")+theme_cowplot()
+
+pt_small  %>% gather(cluster,nCell,-ds) %>% mutate(ds=factor(ds,ds.od,ordered = T))%>% mutate(cluster=factor(cluster,cluster.od,ordered = T))%>%
+  ggplot(aes(x=cluster,y=100*nCell, fill=ds))+
+  geom_bar(stat="identity", position = "dodge")+
+  theme(legend.position="bottom")+
+  scale_y_continuous(position = "right")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+ theme(legend.title = element_blank())+ylab("Cells in cluster (%)")+theme_cowplot()
+
+#Figure 4G
+
+proli_signiture <- list(c("MKI67", "CDK1", "TOP2A","CCNB2", "CCNA2", "PBK"))
+protocols <- AddModuleScore(protocols, features = proli_signiture, name = "proliferation_signiture")
+FeaturePlot(protocols, features = "proliferation_signiture1", repel = TRUE, split.by = "pj", cols = c("lightgrey", "#ff0000"), min.cutoff = 'q20', max.cutoff = 'q70')
+VlnPlot(protocols, features = "proliferation_signiture1", group.by = 'pj')
+
+#proliferation percentages numbers
+Idents(obeject = protocols) <- "pj"
+Wu <- subset(protocols, idents = "H1")
+Veres <- subset(protocols, idents = "Veres")
+Aug <- subset(protocols, idents = "Augsorn.")
+Balboa <- subset(protocols, idents = "Balboa")
+
+
+hist(Veres@meta.data$proliferation_signiture1, labels = TRUE)
+hist(Aug@meta.data$proliferation_signiture1, labels = TRUE)
+hist(Balboa@meta.data$proliferation_signiture1, labels = TRUE)
 
