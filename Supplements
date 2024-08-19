@@ -1,0 +1,79 @@
+#Supplement figure 9
+#Figure 9A
+DimPlot(H1, reduction = "umap")
+
+#Figure 9B
+markers.celltypes <- FindAllMarkers(H1, only.pos = TRUE, logfc.threshold = 0.25, min.pct = 0.5)
+DoHeatmap(H1, features = markers.celltypes, group.by = "cell_prediction", draw.lines = FALSE, slot = "scale.data") 
+
+#Figure9C
+FeaturePlot(H1, features = c("INS", "GCG", "TPH1", "CHGA"), cols = c("lightgrey", "#ff0000"))
+
+#Figure 9D
+VlnPlot(H1, features = c("CACNA2D1"), group.by = 'cell_prediction', pt.size = 0, idents = c("Early Beta","Mature Beta"), cols = c( "Mature Beta"="coral4", "Early Beta"="coral1"))
+
+#Figure 9E
+VlnPlot(H1, features = c("NKX6-1", "NEUROD1", "CHGA"),idents = c("Early Beta","Mature Beta","EC like"), group.by = 'cell_prediction', pt.size = 0, cols = c( "Mature Beta"="coral4", "Early Beta"="coral1", "EC like"="forestgreen"))
+
+#Figure 9F
+#Integration of HS980 and H1 before_int
+before_int <- merge(HS980, y = H1, add.cell.ids = c("HS980", "H1"), project = "celllines")
+before_list <- SplitObject(before_int, split.by = "orig.ident")%>% lapply(function(x){x=FindVariableFeatures(x,verbose=F,nfeatures=2000)})
+
+nGene=2000;pc=25;
+before.features <- SelectIntegrationFeatures(object.list = before_list, nfeatures = nGene)
+for (b in names(before_list)) {
+  VariableFeatures(before_list[[b]]) <- before.features
+}
+
+before_int <- NormalizeData(before_int)
+before_int <- FindVariableFeatures(before_int)
+all.genes <- rownames(before_int)
+before_int <- ScaleData(before_int,  features = all.genes)
+before_int <- RunFastMNN(object.list = before_list)
+before_int <- RunUMAP(before_int, reduction = "mnn", dims = 1:30)
+before_int <- FindNeighbors(before_int, reduction = "mnn", dims = 1:30)
+before_int <- FindClusters(before_int, resolution = 0.3,verbose=F)
+DimPlot(before_int, group.by = "seurat_clusters")
+
+#assigning new cell idententities 
+new.cluster.ids <- c("Early Beta", "Mature Beta", "Alpha", "EC like", "Polyhormonal","EC like", "Delta")
+names(new.cluster.ids) <- levels(before_int)
+before_int <- RenameIdents(before_int, new.cluster.ids)
+DimPlot(before_int, reduction = "umap")
+#add cell tyes to meta data
+before_int$cell_prediction <- Idents(before_int) 
+
+DimPlot(before_int, cols = c("Alpha"="darkgoldenrod2", "Mature Beta"="coral3", "Early Beta"="coral1", "EC like"="forestgreen", "Delta"="magenta2", "Polyhormonal"="azure4"))
+
+#Figure 9G
+#bar plot cell percentages H1 and HS980
+t1 <- table(before_int$orig.ident,before_int$cell_prediction)
+t1
+pt1<- data.frame(prop.table(t1,1))
+pt1
+pt1  %>%
+  ggplot(aes(x=Var2,y=100*Freq, fill=Var1))+
+  geom_bar(stat="identity")+
+  theme(legend.position="bottom")+
+  scale_fill_manual(values=c("darkorange","darkturquoise"))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+ theme(legend.title = element_blank())+ylab("Cells in cluster (%)")+theme_cowplot()+
+  theme(axis.text.x=element_text(angle = 90))
+ggsave("barplot_cellclusters.pdf",w=10,h=7)
+
+
+#Supplement figure 10
+
+#Figure 10A
+DimPlot(Trans_int, group.by = "seurat_clusters", label = T, repel = T)
+
+#Figure 10B
+FeaturePlot(Trans_int, features = c("GCG", "INS", "TPH1", "SST"), cols = c("lightgrey", "#ff0000"), n = 4)
+
+#Figure 10C
+FeaturePlot(Trans_int, features = c("DCN", "MKI67"), cols = c("lightgrey", "#ff0000"), n = 2,  min.cutoff = 'q20', max.cutoff = 'q70')
+
+#Figure 10D
+FeaturePlot(Trans_int, features = c("MAFA","SIX3", "UCN3"), cols = c("lightgrey", "#ff0000"), n = 3)
