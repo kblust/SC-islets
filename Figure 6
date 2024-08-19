@@ -1,0 +1,114 @@
+#compare before and after tranplantation
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(data.table)
+  library(tibble)
+  library(tidyr)
+  library(tidyverse)
+  library(ggplot2)
+  library(scran)
+  library(batchelor)
+  library(Seurat)
+  library(SeuratWrappers)
+  library(scuttle)
+  library(SeuratDisk)
+  library(cowplot)
+  library(uwot)
+  library(writexl)
+  library(pheatmap)
+  library(dittoSeq)
+  library(ComplexHeatmap)
+  library(MAST)
+  library(escape)
+  library(clusterProfiler)
+  library(org.Hs.eg.db)
+  library(AnnotationDbi)
+  library(ggsignif)
+})
+
+
+
+#integrate HS980 before and after 
+Trans_int <- merge(HS980, y = Trans, add.cell.ids = c("before", "after"), project = "Transplantation")
+Trans_list <- SplitObject(Trans_int, split.by = "orig.ident")%>% lapply(function(x){x=FindVariableFeatures(x,verbose=F,nfeatures=2000)})
+
+nGene=2000;pc=25;
+trans.features <- SelectIntegrationFeatures(object.list = Trans_list, nfeatures = nGene)
+for (b in names(Trans_list)) {
+  VariableFeatures(Trans_list[[b]]) <- trans.features
+}
+
+Trans_int <- NormalizeData(Trans_int)
+Trans_int <- FindVariableFeatures(Trans_int)
+all.genes <- rownames(Trans_int)
+Trans_int <- ScaleData(Trans_int,  features = all.genes)
+Trans_int <- RunFastMNN(object.list = Trans_list)
+Trans_int <- RunUMAP(Trans_int, reduction = "mnn", dims = 1:30)
+Trans_int <- FindNeighbors(Trans_int, reduction = "mnn", dims = 1:30)
+Trans_int <- FindClusters(Trans_int, resolution = 0.8,verbose=F)
+DimPlot(Trans_int, group.by = "seurat_clusters", label = T, repel = T)
+
+# Assign cell identidies
+new.cluster.ids <- c("Mature Beta","Early Beta","Mature Beta","EC like","Mature Beta","Alpha","EC like","Polyhormonal","Stellate like","Delta","Proliferating Endocrine")
+names(new.cluster.ids) <- levels(Trans_int)
+Trans_int <- RenameIdents(Trans_int, new.cluster.ids)
+Trans_int$cell_prediction <- Idents(Trans_int)
+
+#Figure 6A
+DimPlot(Trans_int, reduction = "umap", pt.size = 0.5, cols = c("Alpha"="darkgoldenrod2", "Mature Beta"="coral3", "Early Beta"="coral1", "EC like"="forestgreen", "Stellate like"="darkturquoise", "Delta"="dodgerblue", "Proliferating Endocrine"="magenta2", "Polyhormonal"="azure4"), split.by = "orig.ident")
+
+#Figure6B
+#bar plot cell percentages before and after 
+t1 <- table(Trans_int$orig.ident,Trans_int$cell_prediction)
+t1
+pt1<- data.frame(prop.table(t1,1))
+pt1
+pt2 <- pt1
+#
+pt2  %>% mutate(Var1=factor(Var1,c("HS980 before","HS980 after"),ordered = T))%>%
+  ggplot(aes(x=Var2,y=100*Freq, fill=Var1))+
+  geom_bar(stat="identity", position = "dodge")+
+  theme(legend.position="bottom")+
+  scale_fill_manual(values=c("#7AAABA", "coral"))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+ theme(legend.title = element_blank())+ylab("Cells per cluster (%)")+theme_cowplot()+
+  theme(axis.text.x=element_text(angle = 40))
+ggsave("barplot_cellclusters.pdf",w=10,h=7)
+
+#Figure6C
+#beta cell maturation
+mature_signiture <- list(c("INS", "G6PC2", "HOPX", "UCN3", "IAPP", "CPE", "SIX3", "BACE2", "MAFA", "FXYD2"))
+beta_Trans_int <- AddModuleScore(beta_Trans_int, features = mature_signiture, name = "mature_beta_signiture")
+f.violin.mature <- ggplot(beta_Trans_int@meta.data,aes(x=orig.ident,
+                                                y=mature_beta_signiture1,
+                                                fill=orig.ident)) + 
+  geom_violin() + 
+  theme_cowplot() + 
+  geom_signif(comparisons = list(c("HS980 after", "HS980 before")), map_signif_level = TRUE)+
+  scale_fill_manual(values = c("#7AAABA", "coral")) + 
+  xlab("")
+
+f.violin.mature
+
+
+#Alpha cell maturation
+alpha_maturation <- list(c("ARX", "MAFB", "FOXA2", "GCG"))
+alpha_Trans_int <- AddModuleScore(alpha_Trans_int, features = alpha_maturation, name = "alpha_maturation")
+f.violin.alpha <- ggplot(alpha_Trans_int@meta.data,aes(x=orig.ident,
+                                                     y=alpha_maturation1,
+                                                     fill=orig.ident)) + 
+  geom_violin() + 
+  theme_cowplot() + 
+  geom_signif(comparisons = list(c("HS980 after", "HS980 before")), map_signif_level = TRUE)+
+  scale_fill_manual(values = c("#7AAABA", "coral")) + 
+  xlab("")
+
+f.violin.alpha
+
+#Figure6D
+avg_beta <- AverageExpression(beta_Trans_int, return.seurat = TRUE, group.by = "orig.ident")
+DoHeatmap(avg_beta, features = c("INS", "G6PC2", "HOPX", "UCN3", "IAPP", "SIX3", "MAFA", "CPE", "FXYD2"), draw.lines = FALSE, group.by = "orig.ident") + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n =4, name = "RdBu")))
+
+#Figure6E
