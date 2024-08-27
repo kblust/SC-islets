@@ -112,3 +112,40 @@ avg_beta <- AverageExpression(beta_Trans_int, return.seurat = TRUE, group.by = "
 DoHeatmap(avg_beta, features = c("INS", "G6PC2", "HOPX", "UCN3", "IAPP", "SIX3", "MAFA", "CPE", "FXYD2"), draw.lines = FALSE, group.by = "orig.ident") + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n =4, name = "RdBu")))
 
 #Figure6E
+from IPython.core.display import display, HTML
+display(HTML("<style>.container { width:90% !important; }</style>"))
+%matplotlib inline
+import scvelo as scv
+import os
+import numpy as np
+import pandas as pd
+#from matplotlib import rcParams
+import matplotlib.pyplot as plt
+scv.settings.verbosity = 3  # show errors(0), warnings(1), info(2), hints(3)
+scv.settings.set_figure_params('scvelo',dpi_save=300)  # for beautified visualization
+plt.rcParams['pdf.fonttype'] = 'truetype'
+p_col={"Alpha":"#eead0e","Early_Beta":"#ff7256","Mature_Beta":"#8b3e2f","Stellate_like":"#00ced1", "EC_like":"#228b22","Exocrine_progenitor":"#00B9E3","Polyhormonal":"#838b8b","Delta":"#d02090","Proliferating_Endocrine":"#ee00ee"}
+os.chdir(DIR)
+scv.set_figure_params()
+scv.settings.set_figure_params('scvelo')  #
+
+adata = scv.read("/home/chenzh/My_project/sc_pan/tmp_data/Oct_2023/Vel/HS980.vel.h5ad")
+adata.obsm['X_umap']=adata.obs[["UMAP_1","UMAP_2"]].to_numpy()
+adata.obsm['X_umap'].shape
+scv.pl.proportions(adata)
+scv.pp.filter_and_normalize(adata, min_shared_counts=20, n_top_genes=2000)
+scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
+#scv.tl.recover_dynamics(adata,n_jobs=15)
+scv.tl.velocity(adata)
+scv.tl.velocity_graph(adata)
+
+scv.pl.velocity_embedding_stream(
+    adata, basis='umap',color="EML",fontsize=20,size=80,arrow_size=1,figsize=(7,7),title='RNA Velocity of HS980 cells',
+    palette=p_col,legend_fontweight='normal'
+)
+scv.pl.velocity_embedding_stream(
+    adata, basis='umap',color="EML",fontsize=20,size=80,arrow_size=1,figsize=(7,7),title='RNA Velocity of HS980 cells',
+    palette=p_col,legend_fontweight='normal',
+    save='/home/chenzh/My_project/sc_pan/tmp_data/Oct_2023/Vel/HS980.vel.svg'
+)
+
