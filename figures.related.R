@@ -1,5 +1,5 @@
 #' ---
-#' title: "define the H1"
+#' title: "generate the figures"
 #' output:
 #'  html_document:
 #'    code_folding: hide
@@ -23,7 +23,7 @@ suppressPackageStartupMessages({
   #library(batchelor)
   library(Seurat)
   library(cowplot)
-  library(mascarade)
+  #library(mascarade)
   library(ComplexHeatmap)
   #library(SeuratWrappers)
   #library(scuttle)
@@ -62,7 +62,6 @@ options(future.globals.maxSize= 3001289600)
 load("tmp_data/gene.meta.Rdata",verbose=T)
 
 
-heat.col <- colorRampPalette(c("#0D0887FF","#0D0887FF","#0D0887FF","#0D0887FF","#0D0887FF","#7E03A8FF","#7E03A8FF","#CC4678FF","#F89441FF","#F0F921FF","#F0F921FF"))(100)
 
 
 meta.filter <- readRDS(paste0("tmp_data/",TD,"/meta.filter.rds"))
@@ -166,13 +165,17 @@ plot.results$H1.exp.dot <- temp.input %>% mutate(gene=factor(gene,(temp.mk.sel$g
 plot.results$H1.exp.dot 
 
 #' featurePlot 
-temp.ft.genes <- c("HADH","BACE2","INS","GCG","SST","TPH1","TOP2A","CHGA","PPY","GPC5-AS1","THSD7A","GHRL","ACSL1","NPY1R","PTF1A","CPA1")
+temp.ft.genes <- c("HADH","BACE2","INS","GCG","SST","TPH1","TOP2A","CHGA","PPY","GPC5-AS1","THSD7A","GHRL","ACSL1","NPY1R","PTF1A","CPA1","DES", "PDGFRB","PDGFRA","PECAM1","CD34","VWF","TH","CHAT","SLC18A3")
+
+#DESMIN, PDGFRb, PDGFRa), endothelial (PECAM-1, CD34, vWF) and neuron (TH, ChAT, VACHT
 temp.plot <- list()
+data.temp <- data.H1.ob
+data.temp@meta.data$SS <- "SS"
 for (g in temp.ft.genes ) {
   if (g %in% rownames(data.H1.ob@assays$RNA$counts)) {
-    temp.plot[[g]] <- FeaturePlot(data.H1.ob,g,pt.size = 0.1)+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoLegend()+NoAxes()
+    temp.plot[[g]] <- FeaturePlot(data.temp,g,pt.size = 0.1)+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoLegend()+NoAxes()
   }else{
-    temp.plot[[g]] <- ggplot()+theme_void()+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))
+    temp.plot[[g]] <- DimPlot(data.temp,group.by = "SS",cols = "lightgrey",pt.size = 0.1)+ggtitle(paste(g))+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoAxes()+NoLegend()
   }
 }
 plot.results$H1.ft.plot <- temp.plot
@@ -198,25 +201,6 @@ plot.results$DEG.EL.beta.scatter
 plot.results$DEG.EL.beta.scatter.legend <-  ggplot()+geom_point(temp,mapping=aes(x=avg_log2FC,y=-log10(p_val_adj),col=UpDown),size=5)+theme_classic()+ggtitle(n)+theme(plot.title = element_text(hjust=0.5))+scale_color_manual(values=c("UpRe"=as.vector(EML.lineage.col.set[temp.s1]),"DownRe"=as.vector(EML.lineage.col.set[temp.s2]), "notDEG"="lightgrey"))+xlim(-8.5,8.5)+geom_vline(xintercept = -0.25 ,linetype="dashed")+geom_vline(xintercept = 0.25 ,linetype="dashed")+geom_hline(yintercept = -log10(0.05) ,linetype="dashed")
 plot.results$DEG.EL.beta.scatter.legend <-plot.results$DEG.EL.beta.scatter.legend %>% ggpubr::get_legend() %>% ggpubr::as_ggplot()
 plot.results$DEG.EL.beta.scatter.legend
-
-temp.plot <- list()
-for (n in names(H1.pt.results)) {
-  for (m in c("KEGG_2021_Human")) {
-    
-    temp <- H1.pt.results[[n]][[m]]$up %>% as.data.frame() %>% tbl_df()%>% separate(GeneRatio,c("a","b"),sep="/") %>% mutate(GeneRatio=as.numeric(a)/as.numeric(b))   %>% select(ID,pvalue,Count,GeneRatio)  %>% mutate(Nlog10Pvalue=-log10(pvalue)) %>% select(ID,pvalue,GeneRatio,Count,Nlog10Pvalue) %>% mutate(UpDown="UpRe") %>% bind_rows(H1.pt.results[[n]][[m]]$down %>% as.data.frame() %>% tbl_df()%>% separate(GeneRatio,c("a","b"),sep="/") %>% mutate(GeneRatio=as.numeric(a)/as.numeric(b))  %>% select(ID,pvalue,Count,GeneRatio)  %>% mutate(Nlog10Pvalue=-log10(pvalue)) %>% select(ID,pvalue,GeneRatio,Count,Nlog10Pvalue) %>% mutate(UpDown="DownRe"))
-    temp.input <- temp %>% filter(ID %in% sel.pathway)
-    temp.input$Count[ temp.input$Count >= 30] <- 29.99999
-    temp.input$Nlog10Pvalue[ temp.input$Nlog10Pvalue >= 3] <- 2.99999
-
-    temp.plot[[paste(n,m)]]$p1 <- temp.input %>% ggplot()+ geom_point(mapping=aes(y=reorder(ID,GeneRatio),x=UpDown,size=Count,col=Nlog10Pvalue))+xlab("")+ylab("") +theme_classic()+scale_colour_gradient(breaks =c(1,1.3,2,2.5,3) ,limits = c(1,3),labels = c(1,1.3,2,2.5,">3"),low="white",high=EML.lineage.col.set["early_beta"])+theme_bw() + theme(axis.text.x=element_text(angle = 90))+ggtitle(paste(n,m))+theme(plot.title = element_text(hjust=0.5)) +scale_size_continuous(breaks =c(10,20,30) ,limits = c(1,30),labels = c(10,20,">30"),range = c(1,6))
-    temp.plot[[paste(n,m)]]$p1
-    temp.plot[[paste(n,m)]]$p2 <- temp.input %>% ggplot()+ geom_point(mapping=aes(y=reorder(ID,GeneRatio),x=UpDown,size=Count,col=Nlog10Pvalue))+xlab("")+ylab("") +theme_classic()+scale_colour_gradient(breaks =c(1,1.3,2,2.5,3) ,limits = c(1,3),labels = c(1,1.3,2,2.5,">3"),low="white",high="#009FEF")+theme_bw() + theme(axis.text.x=element_text(angle = 90))+ggtitle(paste(n,m))+theme(plot.title = element_text(hjust=0.5)) +scale_size_continuous(breaks =c(10,20,30) ,limits = c(1,30),labels = c(10,20,">30"),range = c(1,6))
-    
-  }
-}
-temp.plot[[paste(n,m)]]$p1 
-temp.plot[[paste(n,m)]]$p2
-plot.results$DEG.EL.beta.pt <- temp.plot
 
 #' #### Pathway enrichment analysis
 temp.compair <- "late_beta_vs_early_beta"
@@ -250,60 +234,76 @@ H1.fgsea.results$late_beta_vs_early_beta$KEGG_2021_Human%>% as.data.frame() %>% 
 
 
 #' check the UMAP for DP integration
-temp.umap <- data.DP.ob.umap %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2)  %>% mutate(EML=cluster_EML)
+temp.umap <- data.DP.ob.umap %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2)  %>% mutate(EML=cluster_EML) 
 
 temp.text.pos <- temp.umap %>% group_by(EML) %>% summarise(UMAP_1=median(UMAP_1),UMAP_2=median(UMAP_2)) #%>% mutate(UMAP_2=ifelse(rename_EML=="PE",UMAP_2+0.5,UMAP_2))
-temp.maskTable <- generateMask( dims=as.data.frame(temp.umap[,c("UMAP_1","UMAP_2")]), cluster=recode(temp.umap$EML,"late_beta"="beta","early_beta"="beta"), minDensity = 10,smoothSigma = 0.03)
+temp.maskTable <- generateMask( dims=as.data.frame(temp.umap[,c("UMAP_1","UMAP_2")]), cluster=recode(temp.umap$EML,"late_beta"="beta","early_beta"="beta"), minDensity = 5,smoothSigma = 0.05)
 
-plot.results$UMAP.DP.EML <-ggplot()+geom_point(temp.umap ,mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=0.1,alpha=0.75)+geom_path( temp.maskTable,mapping=aes(x=UMAP_1,y=UMAP_2,group=group),linewidth=0.5,linetype = 2)+geom_text(data=temp.text.pos,mapping=aes(x=UMAP_1,y=UMAP_2,label=EML),size=4.5 )  + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+scale_color_manual(values=EML.lineage.col.set)+xlim(-14,7)+ylim(-11,8.5)
+plot.results$UMAP.DP.EML <-ggplot()+geom_point(temp.umap ,mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=0.1,alpha=0.75)+geom_path( temp.maskTable,mapping=aes(x=UMAP_1,y=UMAP_2,group=group),linewidth=0.5,linetype = 2)+geom_text(data=temp.text.pos,mapping=aes(x=UMAP_1,y=UMAP_2,label=EML),size=4.5 )  + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+scale_color_manual(values=EML.lineage.col.set)+xlim(-6,12)+ylim(-8,9)
 plot.results$UMAP.DP.EML
 plot.results$UMAP.DP.EML.legend<- ggplot()+geom_point(temp.umap  ,mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=1.5)+geom_text(data=temp.text.pos,mapping=aes(x=UMAP_1,y=UMAP_2,label=EML),size=4 ) + theme_classic()+NoAxes()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+scale_color_manual(values=EML.lineage.col.set)
 plot.results$UMAP.DP.EML.legend <- plot.results$UMAP.DP.EML.legend%>% ggpubr::get_legend() %>% ggpubr::as_ggplot()
 plot.results$UMAP.DP.EML.legend
 
 #' split DP plot
-temp.umap <- data.DP.ob.umap %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(EML=cluster_EML)
-plot.results$UMAP.DP.EML.split <- ggplot()+geom_point(temp.umap ,mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=0.03,alpha=0.75) + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+scale_color_manual(values=EML.lineage.col.set)+xlim(-14,7)+ylim(-11,8.5)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=4)
+temp.umap <- data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(EML=cluster_EML)
+
+plot.results$UMAP.DP.EML.split <- ggplot()+geom_point(temp.umap  ,mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=0.03,alpha=0.75) + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+scale_color_manual(values=EML.lineage.col.set)+xlim(-6,12)+ylim(-8,9)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=7)
 plot.results$UMAP.DP.EML.split 
 
 # ' highlight prolif
-temp.umap <- data.DP.ob.umap %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(cluster_EML=recode(cluster_EML,"late_beta"="beta","early_beta"="beta")) %>% mutate(EML=cluster_EML)
-plot.results$UMAP.DP.HL.prolif <- ggplot()+geom_point(temp.umap %>% filter(prolifSig > 0) ,mapping=aes(x=UMAP_1,y=UMAP_2),size=0.03,color="firebrick3") +geom_point(temp.umap %>% filter(prolifSig <= 0) ,mapping=aes(x=UMAP_1,y=UMAP_2),size=0.05,alpha=0.75,color="lightgrey")+ theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+xlim(-14,7)+ylim(-11,8.5)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=4)
-plot.results$UMAP.DP.HL.prolif
+# temp.umap <- data.DP.ob.umap %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(cluster_EML=recode(cluster_EML,"late_beta"="beta","early_beta"="beta")) %>% mutate(EML=cluster_EML)
+# plot.results$UMAP.DP.HL.prolif <- ggplot()+geom_point(temp.umap %>% filter(prolifSig > 0) ,mapping=aes(x=UMAP_1,y=UMAP_2),size=0.03,color="firebrick3") +geom_point(temp.umap %>% filter(prolifSig <= 0) ,mapping=aes(x=UMAP_1,y=UMAP_2),size=0.05,alpha=0.75,color="lightgrey")+ theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+xlim(-6,12)+ylim(-8,9)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=5)
+# plot.results$UMAP.DP.HL.prolif
 
 # ' highlight prolif ft
-temp.umap <- data.DP.ob.umap %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(cluster_EML=recode(cluster_EML,"late_beta"="beta","early_beta"="beta")) %>% mutate(EML=cluster_EML) %>% arrange(prolifSig)
-plot.results$UMAP.DP.ft.prolif <- ggplot()+geom_point(temp.umap  ,mapping=aes(x=UMAP_1,y=UMAP_2,col=prolifSig),size=0.03) + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+xlim(-14,7)+ylim(-11,8.5)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=4)+scale_color_gradient2(low="lightgrey",mid="lightgrey",high="blue")
-plot.results$UMAP.DP.ft.prolif.legend <- ggplot()+geom_point(temp.umap  ,mapping=aes(x=UMAP_1,y=UMAP_2,col=prolifSig),size=0.03) + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+xlim(-14,7)+ylim(-11,8.5)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=4)+scale_color_gradient2(low="lightgrey",mid="lightgrey",high="blue")
+temp.umap <- data.DP.ob.umap%>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(cluster_EML=recode(cluster_EML,"late_beta"="beta","early_beta"="beta")) %>% mutate(EML=cluster_EML) %>% arrange(prolifSig)
+plot.results$UMAP.DP.ft.prolif <- ggplot()+geom_point(temp.umap ,mapping=aes(x=UMAP_1,y=UMAP_2,col=prolifSig),size=0.03) + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+NoLegend()+xlim(-6,12)+ylim(-8,9)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=7)+scale_color_gradient2(low="lightgrey",mid="lightgrey",high="blue")
+plot.results$UMAP.DP.ft.prolif.legend <- ggplot()+geom_point(temp.umap  ,mapping=aes(x=UMAP_1,y=UMAP_2,col=prolifSig),size=0.03) + theme_classic()+ggtitle("Annotation")+theme(plot.title = element_text(hjust=0.5))+xlim(-6,12)+ylim(-8,9)+facet_wrap(~factor(pj,pj.od,ordered = T),ncol=4)+scale_color_gradient2(low="lightgrey",mid="lightgrey",high="blue")
 plot.results$UMAP.DP.ft.prolif.legend <- plot.results$UMAP.DP.ft.prolif.legend%>% ggpubr::get_legend() %>% ggpubr::as_ggplot()
 plot.results$UMAP.DP.ft.prolif.legend
 
 #' check the prolif percentage 
-data.DP.ob.umap  %>% filter(prolifSig > 0) %>% group_by(pj) %>% summarise(pp_Cell=n_distinct(cell)) %>% inner_join(data.DP.ob.umap  %>% group_by(pj) %>% summarise(total_Cell=n_distinct(cell)),by="pj") %>% mutate(prop=round(pp_Cell/total_Cell*100,2)) 
+data.DP.ob.umap  %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj))%>% filter(prolifSig > 0) %>% group_by(pj) %>% summarise(pp_Cell=n_distinct(cell)) %>% inner_join(data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% group_by(pj) %>% summarise(total_Cell=n_distinct(cell)),by="pj") %>% mutate(prop=round(pp_Cell/total_Cell*100,2)) 
+
+
+#data.DP.ob.umap  %>% mutate(pj=ifelse(pj=="Rajaei_2025" ,devTime,pj))%>% filter(prolifSig > 0 & cluster_EML!="prolif") %>% group_by(pj) %>% summarise(pp_Cell=n_distinct(cell)) %>% inner_join(data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% group_by(pj) %>% summarise(total_Cell=n_distinct(cell)),by="pj") %>% mutate(prop=round(pp_Cell/total_Cell*100,2)) 
+
+
+data.DP.ob.umap  %>% mutate(pj=ifelse(pj=="Rajaei_2025" ,devTime,pj))%>% filter(prolifSig > 0 & cluster_EML=="exo") %>% group_by(pj) %>% summarise(pp_Cell=n_distinct(cell)) %>% inner_join(data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% group_by(pj) %>% summarise(total_Cell=n_distinct(cell)),by="pj") %>% mutate(prop=round(pp_Cell/total_Cell*100,2)) 
+
+data.DP.ob.umap  %>% mutate(pj=ifelse(pj=="Rajaei_2025" ,devTime,pj))%>% filter(prolifSig > 0 & cluster_EML %in% c("alpha","delta","early_beta","late_beta","NeuroEndo","polyhormonal","prolif","SCEC")) %>% group_by(pj) %>% summarise(pp_Cell=n_distinct(cell)) %>% inner_join(data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% group_by(pj) %>% summarise(total_Cell=n_distinct(cell)),by="pj") %>% mutate(prop=round(pp_Cell/total_Cell*100,2)) 
+
 
 #' show the barplot number
-temp.umap <- data.DP.ob.umap %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(EML=cluster_EML) %>% mutate(cluster_EML=recode(cluster_EML,"late_beta"="beta","early_beta"="beta"))
-temp.input1 <- temp.umap %>% group_by(pj,cluster_EML) %>% summarise(nCell=n_distinct(cell)) %>% group_by(pj) %>% mutate(prop=nCell/sum(nCell))  %>% mutate(pj=factor(pj,pj.od,ordered = T)) 
-temp.input2 <- temp.umap %>% group_by(pj,EML,cluster_EML) %>% summarise(nCell=n_distinct(cell)) %>% group_by(pj) %>% mutate(prop=nCell/sum(nCell))  %>% mutate(pj=factor(pj,pj.od,ordered = T)) 
-plot.results$H1.bar.left <- ggplot()+geom_bar(data=temp.input1  %>% filter(cluster_EML %in% c("beta","alpha","SCEC"))  %>% mutate(cluster_EML=factor(cluster_EML,c("beta","alpha","SCEC"),ordered = T)) , mapping=aes(x=cluster_EML,y=prop,fill=pj),stat="identity",position="dodge",alpha=0.75,width=0.75,col="black")+geom_bar(data=temp.input2 %>% filter(EML %in% c("early_beta","alpha","SCEC")) %>% mutate(cluster_EML=factor(cluster_EML,c("beta","alpha","SCEC"),ordered = T)),mapping=aes(x=cluster_EML,y=prop,fill=pj),stat="identity",position="dodge",width=0.75,col="grey33")+scale_fill_manual(values=pj.col.set)+xlab("")+theme_classic()+ylim(0,0.65)+ylab("")
+temp.umap <- data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% select(cell,EML,cluster_EML,SC,prolifSig,pj,umap_1,umap_2) %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) %>% mutate(EML=cluster_EML) %>% mutate(cluster_EML=recode(cluster_EML,"late_beta"="beta","early_beta"="beta"))
+temp.input1 <- temp.umap %>% group_by(pj,cluster_EML) %>% summarise(nCell=n_distinct(cell)) %>% group_by(pj) %>% mutate(prop=nCell/sum(nCell)) %>% select(-nCell) %>% spread(cluster_EML,prop)%>% replace(.,is.na(.),0) %>% gather(cluster_EML,prop,-pj) %>% mutate(pj=factor(pj,pj.od,ordered = T)) 
+temp.input2 <- temp.umap %>% group_by(pj,EML,cluster_EML) %>% summarise(nCell=n_distinct(cell)) %>% group_by(pj) %>% mutate(prop=nCell/sum(nCell)) %>% unite(cluster_EML,c(EML,cluster_EML),sep=":") %>% select(-nCell) %>% spread(cluster_EML,prop)%>% replace(.,is.na(.),0) %>% gather(cluster_EML,prop,-pj) %>% separate(cluster_EML,c("EML","cluster_EML"),sep=":") %>% mutate(pj=factor(pj,pj.od,ordered = T)) 
+plot.results$H1.bar.left <- ggplot()+geom_bar(data=temp.input1  %>% filter(cluster_EML %in% c("beta","alpha","SCEC"))  %>% mutate(cluster_EML=factor(cluster_EML,c("beta","alpha","SCEC"),ordered = T)) , mapping=aes(x=cluster_EML,y=prop,fill=pj),stat="identity",position="dodge",alpha=0.75,width=0.75,col="black")+geom_bar(data=temp.input2 %>% filter(EML %in% c("early_beta","alpha","SCEC")) %>% mutate(cluster_EML=factor(cluster_EML,c("beta","alpha","SCEC"),ordered = T)),mapping=aes(x=cluster_EML,y=prop,fill=pj),stat="identity",position="dodge",width=0.75,col="grey33")+scale_fill_manual(values=pj.col.set)+xlab("")+theme_classic()+ylim(0,0.75)+ylab("")
 plot.results$H1.bar.left
 
-plot.results$H1.bar.right <- ggplot()+geom_bar(data=temp.input1 %>% filter(cluster_EML %in% c("delta","polyhormonal","prolif","exo"))  %>% mutate(cluster_EML=factor(cluster_EML,c("delta","polyhormonal","prolif","exo"),ordered = T)) , mapping=aes(x=cluster_EML,y=prop,fill=pj),stat="identity",position="dodge",width=0.75,col="black")+scale_fill_manual(values=pj.col.set)+xlab("")+theme_classic()+ylim(0,0.175)+ylab("")
+plot.results$H1.bar.right <- ggplot()+geom_bar(data=temp.input1 %>% filter(cluster_EML %in% c("delta","polyhormonal","NeuroEndo","prolif","exo"))  %>% mutate(cluster_EML=factor(cluster_EML,c("delta","polyhormonal","NeuroEndo","prolif","exo"),ordered = T)) , mapping=aes(x=cluster_EML,y=prop,fill=pj),stat="identity",position="dodge",width=0.75,col="black")+scale_fill_manual(values=pj.col.set)+xlab("")+theme_classic()+ylim(0,0.41)+ylab("")+ggbreak::scale_y_break(c(0.18, 0.35))
 plot.results$H1.bar.right
 
+data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% group_by(cluster_EML,pj) %>% summarise(nCell=n_distinct(cell))%>% group_by(pj) %>% mutate(prop=nCell/sum(nCell)) %>% filter(cluster_EML=="SCEC")
+
+data.DP.ob.umap %>% group_by(cluster_EML,pj) %>% summarise(nCell=n_distinct(cell))%>% group_by(pj) %>% mutate(prop=nCell/sum(nCell)) %>% filter(cluster_EML=="SCEC")
 
 
 
+data.DP.ob.umap %>% mutate(pj=ifelse(pj=="Rajaei_2025",devTime,pj)) %>% group_by(cluster_EML,pj) %>% summarise(nCell=n_distinct(cell))%>% group_by(pj) %>% mutate(prop=nCell/sum(nCell)) %>% filter(cluster_EML=="exo")
 
+data.DP.ob.umap %>% group_by(cluster_EML,pj) %>% summarise(nCell=n_distinct(cell))%>% group_by(pj) %>% mutate(prop=nCell/sum(nCell)) %>% filter(cluster_EML=="exo")
+temp.umap %>%select(-SC)  %>% rename(annotation=EML,cluster_annotation=cluster_EML)%>% write.table("tmp_data/temp.source.data.fig4G_J.tsv",col.names = T,row.names = F,quote = F,sep="\t")
 
 #' show DP integration based on orignal annotation
-temp.umap <- data.DP.ob.umap %>% filter(pj=="H1") %>% bind_rows(data.DP.ob.umap %>% filter(pj=="Veres_2019") %>% mutate(EML=ifelse(EML=="exo",subCT,EML)) %>% mutate(EML=recode(EML,"neurog3"="other","acinar_like"="acinar","ductal_like"="ductal","early_exo"="exo","late_exo"="exo") ))  %>% bind_rows(data.DP.ob.umap %>% filter(pj=="Augsor_2022") %>% mutate(EML=recode(EML,"prolif_alpha"="prolif")) ) %>% bind_rows(data.DP.ob.umap %>% filter(pj=="BalBoa_2022") %>% mutate(EML=recode(EML,"prolif_alpha"="prolif","not_endo"="exo")))  %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) 
+temp.umap <- data.DP.ob.umap %>% filter(pj=="H1") %>% bind_rows(data.DP.ob.umap %>% filter(pj=="Veres_2019") %>% mutate(EML=ifelse(EML=="exo",subCT,EML)) %>%mutate(EML=ifelse(subCT=="other__gap43","NeuroEndo",EML)) %>% mutate(EML=recode(EML,"neurog3"="other","acinar_like"="acinar","ductal_like"="ductal","early_exo"="exo","late_exo"="exo") ))  %>% bind_rows(data.DP.ob.umap %>% filter(pj=="Augsor_2022") %>% mutate(EML=recode(EML,"prolif_alpha"="prolif")) ) %>% bind_rows(data.DP.ob.umap %>% filter(pj=="BalBoa_2022") %>% mutate(EML=recode(EML,"prolif_alpha"="prolif","not_endo"="exo")))  %>% bind_rows(data.DP.ob.umap %>% filter(pj=="Rajaei_2025") %>% mutate(pj=devTime) %>% mutate(EML=recode(EML,"early_duct"="ductal","duct"="ductal","GAP43pNE"="NeuroEndo")))  %>% rename(UMAP_1=umap_1,UMAP_2=umap_2) 
 
 temp.plot <- list()
 temp.plot.legend <- list()
-for ( p in c("H1","Veres_2019","Augsor_2022","BalBoa_2022")) {
-  temp.plot[[p]] <- ggplot()+geom_point(temp.umap %>% filter(pj==p),mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=0.2,alpha=0.75) + theme_classic()+ggtitle(p)+theme(plot.title = element_text(hjust=0.5))+scale_color_manual(values=c(EML.lineage.col.set,EML.lineage.col.extra.set))+xlim(-14,7)+ylim(-11,8.5)+NoLegend()
-  temp.plot.legend [[p]] <- ggplot()+geom_point(temp.umap %>% filter(pj==p),mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=2) + theme_classic()+ggtitle(p)+theme(plot.title = element_text(hjust=0.5))+scale_color_manual(values=c(EML.lineage.col.set,EML.lineage.col.extra.set))+xlim(-14,7)+ylim(-11,8.5)
+for ( p in c("H1","Augsor_2022","BalBoa_2022","Veres_2019","Rajaei_not_enriched","Rajaei_enriched")) {
+  temp.plot[[p]] <- ggplot()+geom_point(temp.umap %>% filter(pj==p),mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=0.2,alpha=0.75) + theme_classic()+ggtitle(p)+theme(plot.title = element_text(hjust=0.5))+scale_color_manual(values=c(EML.lineage.col.set,EML.lineage.col.extra.set))+xlim(-6,12)+ylim(-8,9)+NoLegend()
+  temp.plot.legend [[p]] <- ggplot()+geom_point(temp.umap %>% filter(pj==p),mapping=aes(x=UMAP_1,y=UMAP_2,color=EML),size=2) + theme_classic()+ggtitle(p)+theme(plot.title = element_text(hjust=0.5))+scale_color_manual(values=c(EML.lineage.col.set,EML.lineage.col.extra.set))+xlim(-6,12)+ylim(-8,9)
   temp.plot.legend [[p]] <- temp.plot.legend [[p]]%>% ggpubr::get_legend() %>% ggpubr::as_ggplot()
 }
 cowplot::plot_grid(plotlist = temp.plot)
@@ -370,12 +370,17 @@ if (generate_dot_plot) {
     data.temp@reductions$umap@cell.embeddings[,1] <- (data.BA.trans.umap %>% tibble::column_to_rownames("cell"))[rownames(data.temp@meta.data),"umap_1"]
     data.temp@reductions$umap@cell.embeddings[,2] <- (data.BA.trans.umap  %>% as.data.frame()%>% tibble::column_to_rownames("cell"))[rownames(data.temp@meta.data),"umap_2"]
     Idents(data.temp) <- factor(data.temp@meta.data$EML)
-    
-    temp.ft.genes <- c("HADH","IAPP","INS","GCG","SST","TPH1","TOP2A","CHGA","PPY","GPC5-AS1","THSD7A","GHRL","ACSL1","NPY1R","PTF1A","CPA1","DCN","LGALS1","MAFA","SIX3","UCN3")#,"CALB2","BACE2",
+    data.temp@meta.data$SS <- "SS"
+    #temp.ft.genes <- c("HADH","IAPP","INS","GCG","SST","TPH1","TOP2A","CHGA","PPY","GPC5-AS1","THSD7A","GHRL","ACSL1","NPY1R","PTF1A","CPA1","DCN","LGALS1","MAFA","SIX3","UCN3")#,"CALB2","BACE2",
+    #temp.ft.genes <- c("HADH","BACE2","INS","GCG","SST","TPH1","TOP2A","CHGA","PPY","GPC5-AS1","THSD7A","GHRL","ACSL1","NPY1R","PTF1A","CPA1","DCN","LGALS1","MAFA","SIX3","UCN3","DES", "PDGFRB","PDGFRA","PECAM1","CD34","VWF","TH","CHAT","SLC18A3")
+    temp.ft.genes <- c("HADH","BACE2","INS","GCG","SST","TPH1","TOP2A","CHGA","PPY","GPC5-AS1","THSD7A","GHRL","ACSL1","NPY1R","PTF1A","CPA1","DCN","LGALS1","MAFA","FXYD2","G6PC2","SCGN","PCSK1N","RBP4","DES", "PDGFRB","PDGFRA","PECAM1","CD34","VWF","TH","CHAT","SLC18A3","IAPP","FXYD2","G6PC2","SCGN","PCSK1N","RBP4","NEUROG3")
+    temp.ft.genes %>% setdiff(rownames( counts.filter))
     temp.plot <- list()
     for (g in temp.ft.genes ) {
-      if (!g %in% rownames(data.temp@assays$RNA$counts)) {
-        temp.plot[[g]] <- ggplot()+theme_void()+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))
+      if (!g %in% rownames(data.temp@assays$RNA$counts) & g %in% rownames(counts.filter)) {
+        print(g)
+        temp.plot[[g]] <- DimPlot(data.temp,group.by = "SS",cols = "lightgrey",pt.size = 0.1)+ggtitle(paste(g))+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoAxes()+NoLegend()+xlim(-5,13)+ylim(-7.5,6)
+          ggplot()+theme_void()+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))
       }else if ( sum(data.temp@assays$RNA$counts[g,])==0) {
         temp.plot[[g]] <- FeaturePlot(data.temp,g,pt.size = 0.001,cols =c("lightgrey", "lightgrey"))+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoLegend()+NoAxes()+xlim(-5,13)+ylim(-7.5,6)
       }else{
@@ -386,6 +391,31 @@ if (generate_dot_plot) {
     cowplot::plot_grid(plotlist = temp.plot)
     plot.results$HS980.BA.ft.plot[[sa]] <- temp.plot
   }
+  #' featurePlot of mature markers
+  temp.M <- data.BA.trans.umap  %>% select(cell:mt.perc)
+  temp.sel.expG <- rownames(BA.lognormExp.mBN)
+  
+  data.temp <- CreateSeuratObject(counts.filter[temp.sel.expG,c(temp.M$cell)], meta.data = (temp.M %>% tibble::column_to_rownames("cell"))) %>% NormalizeData(verbose = FALSE)
+  data.temp@assays$RNA$data <- as.matrix(BA.lognormExp.mBN[temp.sel.expG,rownames(data.temp@meta.data)])
+  data.temp <- data.temp  %>% FindVariableFeatures( selection.method = "vst", nfeatures = 2000, verbose = FALSE) %>% ScaleData(verbose=F)%>% RunPCA(verbose=F) %>% RunUMAP(dims=1:25,verbose=F)
+  data.temp@reductions$umap@cell.embeddings[,1] <- (data.BA.trans.umap %>% tibble::column_to_rownames("cell"))[rownames(data.temp@meta.data),"umap_1"]
+  data.temp@reductions$umap@cell.embeddings[,2] <- (data.BA.trans.umap  %>% as.data.frame()%>% tibble::column_to_rownames("cell"))[rownames(data.temp@meta.data),"umap_2"]
+  Idents(data.temp) <- factor(data.temp@meta.data$EML)
+  data.temp@meta.data$SS <- "SS"
+  temp.ft.genes <- c("INS", "IAPP","SIX3","MAFA","FXYD2","G6PC2", "SCGN", "PCSK1N", "HADH", "FXYD2", "RBP4")
+  
+  temp.plot <- list()
+  for (g in temp.ft.genes ) {
+    temp.plot[[g]] <- FeaturePlot(data.temp,g,pt.size = 0.001,split.by = "devTime",order = T)
+  }
+  cowplot::plot_grid(plotlist = temp.plot)
+  plot.results$HS980.BA.mature.ft.plot <- temp.plot
+  
+  
+  
+  
+  
+  
   
   temp.lm.od <- c("early_beta","late_beta","beta","alpha","delta","polyhormonal","SCEC","prolif","psc")
   temp.M <-  data.BA.trans.umap %>% mutate(cluster_EML=EML) %>% filter(cluster_EML %in% temp.lm.od) %>% mutate(od=factor(cluster_EML,temp.lm.od,ordered = T)) %>% arrange(od)
@@ -420,7 +450,7 @@ if (generate_dot_plot) {
     }
     
   }
-
+  expm1(BA.lognormExp.mBN[c("INS", "IAPP","MAFA","FXYD2","G6PC2", "SCGN", "PCSK1N", "HADH", "RBP4"),temp.M$cell ]) %>% tibble::rownames_to_column("gene")%>%  write.table("tmp_data/temp.source.data.fig6E.tsv",col.names = T,row.names = F,quote = F,sep="\t")
   plot.results$DEG.bar.trans <- temp.plot
   cowplot::plot_grid(plotlist = temp.plot)
   #cowplot::plot_grid(plotlist = temp.plot$before,nrow=1)
@@ -440,3 +470,49 @@ plot.results$HS980.BA.bar.left <- ggplot()+geom_bar(data=temp.input1  %>% filter
 plot.results$HS980.BA.bar.left
 
 plot.results$HS980.BA.bar.right <- ggplot()+geom_bar(data=temp.input1 %>% filter(cluster_EML %in% c("delta","polyhormonal","prolif","psc"))  %>% mutate(cluster_EML=factor(cluster_EML,c("delta","polyhormonal","prolif","psc"),ordered = T)) , mapping=aes(x=cluster_EML,y=prop,fill=pj),stat="identity",position="dodge",width=0.75,col="black")+scale_fill_manual(values=pj.col.set)+xlab("")+theme_classic()+ylim(0,7.5)+ylab("")
+
+temp.umap %>% select(cell,EML,pj,UMAP_1,UMAP_2) %>% rename(annotation=EML) %>% write.table("tmp_data/temp.source.data.fig6A_C.tsv",col.names = T,row.names = F,quote = F,sep="\t")
+
+# check activate /quisent
+if (check) {
+  counts.filter <- readRDS(paste0("tmp_data/",TD,"/counts.filter.rds"))[,meta.filter$cell]
+  BA.lognormExp.mBN <- readRDS(file=paste0("tmp_data/",TD,"/before.after.trans.fastMNN.lognormExp.mBN.rds"))
+  
+  
+  sa="HS980_trans"
+  temp.M <- data.BA.trans.umap %>% filter(devTime %in% sa) %>% select(cell:mt.perc)
+  temp.sel.expG <- rownames(BA.lognormExp.mBN)
+  
+  data.temp <- CreateSeuratObject(counts.filter[temp.sel.expG,c(temp.M$cell)], meta.data = (temp.M %>% tibble::column_to_rownames("cell"))) %>% NormalizeData(verbose = FALSE)
+  data.temp@assays$RNA$data <- as.matrix(BA.lognormExp.mBN[temp.sel.expG,rownames(data.temp@meta.data)])
+  data.temp <- data.temp  %>% FindVariableFeatures( selection.method = "vst", nfeatures = 2000, verbose = FALSE) %>% ScaleData(verbose=F)%>% RunPCA(verbose=F) %>% RunUMAP(dims=1:25,verbose=F)
+  data.temp@reductions$umap@cell.embeddings[,1] <- (data.BA.trans.umap %>% tibble::column_to_rownames("cell"))[rownames(data.temp@meta.data),"umap_1"]
+  data.temp@reductions$umap@cell.embeddings[,2] <- (data.BA.trans.umap  %>% as.data.frame()%>% tibble::column_to_rownames("cell"))[rownames(data.temp@meta.data),"umap_2"]
+  Idents(data.temp) <- factor(data.temp@meta.data$EML)
+  data.temp@meta.data$SS <- "SS"
+  temp.ft.genes <- c("DES", "GFAP", "ACTA2", "COL1A1", "COL1A2", "COL3A1", "FN1")
+  temp.plot <- list()
+  for (g in temp.ft.genes ) {
+    if (!g %in% rownames(data.temp@assays$RNA$counts)) {
+      temp.plot[[g]] <- DimPlot(data.temp,group.by = "SS",cols = "lightgrey",pt.size = 0.1)+ggtitle(paste(g))+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoAxes()+NoLegend()
+      ggplot()+theme_void()+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))
+    }else if ( sum(data.temp@assays$RNA$counts[g,])==0) {
+      temp.plot[[g]] <- FeaturePlot(data.temp,g,pt.size = 0.001,cols =c("lightgrey", "lightgrey"))+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoLegend()+NoAxes()+xlim(-5,13)+ylim(-7.5,6)
+    }else{
+      temp.plot[[g]] <- FeaturePlot(data.temp,g,pt.size = 0.001)+ggtitle(g)+theme(plot.title = element_text(hjust=0.5,face="plain"))+NoLegend()+NoAxes()+xlim(-5,13)+ylim(-7.5,6)
+      
+    }
+  }
+  cowplot::plot_grid(plotlist = temp.plot)
+  plot.results$stella.qa.plot <- temp.plot  
+  temp <- counts.filter[temp.ft.genes ,data.BA.trans.umap %>% filter(devTime %in% sa & EML=="psc") %>% pull(cell)] %>% tibble::rownames_to_column("gene") %>% gather(cell,ct,-gene) %>% tbl_df() %>% mutate(ep=ifelse(ct >0,"Exp","NE")) %>% group_by(gene,ep) %>% summarise(nCell=n_distinct(cell)) %>%group_by(gene) %>% mutate(prop=nCell/sum(nCell)) %>% select(gene,ep,prop) %>% spread(ep,prop) %>% replace(.,is.na(.),0) %>% gather(ep,prop,-gene) %>% mutate(gene=factor(gene,temp.ft.genes,ordered = T))
+  plot.results$stella.qa.ep.plot <- temp %>% filter(ep=="Exp") %>% ggplot()+geom_bar(mapping=aes(x=gene,y=prop*100),stat="identity",width=0.6,fill="grey66")+xlab("")+ylab("Proportion of stella cells with expression")+theme_classic()
+}
+if (check) {
+  prolif.mk <- c("MKI67","CDK1","TOP2A","CCNB2","CCNA2","PBK")
+  data.ob <- readRDS(paste0("tmp_data/",TD,"/before.after.trans.data.ob.rds"))
+  data.temp <- JoinLayers(data.ob)
+  data.temp <- AddModuleScore(data.temp, features = list(prolifSig=prolif.mk ), name = "prolifSig")
+  temp <- data.frame(cell=rownames(data.temp@meta.data),prolifSig=data.temp@meta.data$prolifSig1) %>% tbl_df() %>% inner_join(data.BA.trans.umap ,by="cell")
+  temp %>% filter(pj=="HS980_trans" & EML=="psc") %>% filter(prolifSig >0)
+}
